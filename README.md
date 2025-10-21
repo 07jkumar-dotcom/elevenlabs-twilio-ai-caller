@@ -18,18 +18,6 @@ This system is ideal for businesses looking to automate customer interactions, e
 
 ---
 
-### Why So Many Scripts?
-
-In the 'forTheLegends' folder I inclulde 7x different scripts:
-
-![CleanShot 2024-12-11 at 14 24 28](https://github.com/user-attachments/assets/04b71136-3bbd-4020-aee4-e57dc0d861b3)
-
-When I was coding out the final scripts that I demo in the above video ('inbound-calls.js' & 'outbound-calls.js'), I had to incrementally build out all of the scripts in the 'forTheLegends' folder.
-
-They were difficult to build and get right, and so I thought they could hold some inherent value for other people who are also looking to build custom code solutions for their Elevenlabs agent.
-
-I decided to include them in the repo as they might be good checkpoints/ starting points for other projects.
-
 Here's what each script accomplishes:
 
 #### Inbound Calls:
@@ -137,10 +125,5 @@ Here are useful resources for setting up and understanding the project:
 - [Settings for Authenticated Requests](https://elevenlabs.io/docs/conversational-ai/customization/conversation-configuration)
 - Watch the tutorial video: https://youtu.be/_BxzbGh9uvk
 
----
-
-Star ⭐ this repository if you find it helpful!
-
-Want to donate? https://bartslodyczka.gumroad.com/l/potvn
 
 
