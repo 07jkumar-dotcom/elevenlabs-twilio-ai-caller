@@ -1,6 +1,6 @@
 # Connect Elevenlabs Conversation AI Agent to Twilio for Inbound and Outbound Calls
 
-![CleanShot 2024-12-11 at 22 52 50 1](https://github.com/user-attachments/assets/97108c31-0679-44e5-a7a9-cc7e640dcbf1)
+
 
 Watch the video tutorial here: https://youtu.be/_BxzbGh9uvk
 
@@ -46,8 +46,6 @@ This breakdown provides all the flexibility you need to handle various call work
 
 ## System Architecture
 
-![CleanShot 2024-12-11 at 13 02 52](https://github.com/user-attachments/assets/30d38b95-a56b-419f-ad37-5e1fef0cab6a)
-
 ---
 
 ## Passing Through Custom Parameters
@@ -74,8 +72,6 @@ Settings for authenticated requests: [https://elevenlabs.io/docs/conversational-
 - **Unauthenticated calls**: These calls do not allow for setting custom parameters, making them suitable for basic scenarios.
 - **Authenticated calls**: These calls enable custom parameter handling, allowing you to create personalized experiences for your users.
 
-![CleanShot 2024-12-11 at 13 21 50](https://github.com/user-attachments/assets/089bfaf2-5441-4ee0-8b11-a16a00b9383f)
-
 ---
 
 ## Passing in Custom Values from Make.com
@@ -88,7 +84,6 @@ We can pass in custom values from Make.com when triggering the call. For example
 2. Twilio uses **TwiML** to pass the variables into the Media Stream.
 3. The WebSocket server accesses these variables and passes them to the ElevenLabs agent.
 
-![CleanShot 2024-12-11 at 13 05 36](https://github.com/user-attachments/assets/382c95b5-4417-42e1-82ae-0ea8488d5878)
 
 ---
 
