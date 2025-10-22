@@ -1,5 +1,4 @@
-import WebSocket from "ws";
-
+﻿import WebSocket from "ws";
 export function registerInboundRoutes(fastify) {
     // Check for the required environment variables
     const { ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID } = process.env;
@@ -71,7 +70,7 @@ export function registerInboundRoutes(fastify) {
 
                 // Handle open event for ElevenLabs WebSocket
                 elevenLabsWs.on("open", () => {
-                    console.log("[II] Connected to Conversational AI. Sending dynamic variables�");
+                    console.log("[II] Connected to Conversational AI. Sending dynamic variables…");
                     elevenLabsWs.send(JSON.stringify({
                         type: "conversation_initiation_client_data",
                         dynamic_variables: {
@@ -109,6 +108,7 @@ export function registerInboundRoutes(fastify) {
                             console.info("[II] Received conversation initiation metadata.");
                             convoReady = true;
                             break;
+
                         case "audio":
                             if (message.audio_event?.audio_base_64) {
                                 const audioData = {
