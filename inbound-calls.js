@@ -108,17 +108,31 @@ export function registerInboundRoutes(fastify) {
                             console.info("[II] Received conversation initiation metadata.");
                             convoReady = true;
                             break;
+
                         case "audio":
                             if (message.audio_event?.audio_base_64) {
                                 const audioData = {
                                     event: "media",
                                     streamSid,
-                                    media: { payload: message.audio_event.audio_base_64 },
+                                    media: {
+                                        payload: message.audio_event.audio_base_64,
+                                    },
                                 };
                                 connection.send(JSON.stringify(audioData));
                             }
                             break;
-                        }
+                        case "interruption":
+                            connection.send(JSON.stringify({ event: "clear", streamSid }));
+                            break;
+                        case "ping":
+                            if (message.ping_event?.event_id) {
+                                const pongResponse = {
+                                    type: "pong",
+                                    event_id: message.ping_event.event_id,
+                                };
+                                elevenLabsWs.send(JSON.stringify(pongResponse));
+                            }
+                            break;
                     }
                 };
 
