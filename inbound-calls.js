@@ -1,4 +1,5 @@
 ﻿import WebSocket from "ws";
+
 export function registerInboundRoutes(fastify) {
     // Check for the required environment variables
     const { ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID } = process.env;
@@ -108,7 +109,6 @@ export function registerInboundRoutes(fastify) {
                             console.info("[II] Received conversation initiation metadata.");
                             convoReady = true;
                             break;
-
                         case "audio":
                             if (message.audio_event?.audio_base_64) {
                                 const audioData = {
