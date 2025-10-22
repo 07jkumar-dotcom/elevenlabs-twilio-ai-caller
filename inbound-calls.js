@@ -1,4 +1,4 @@
-import WebSocket from "ws";
+﻿import WebSocket from "ws";
 // ---- AUDIO HELPERS (paste near top of file) ----
 function parseWavAndExtractData(wavBuf) {
     // Basic RIFF/WAVE checks
@@ -49,10 +49,10 @@ function ensureRawUlawBase64(inB64) {
             return { ok: false, reason: `wav-not-ulaw(fmt=${info.audioFormat})` };
         }
         if (info.sampleRate !== 8000) {
-            console.warn(`[WAV] sampleRate=${info.sampleRate} (expected 8000) � Twilio wants 8 kHz`);
+            console.warn(`[WAV] sampleRate=${info.sampleRate} (expected 8000) — Twilio wants 8 kHz`);
         }
         if (info.numChannels !== 1) {
-            console.warn(`[WAV] channels=${info.numChannels} (expected mono) � Twilio wants mono`);
+            console.warn(`[WAV] channels=${info.numChannels} (expected mono) — Twilio wants mono`);
         }
         return { ok: true, b64: info.data.toString("base64"), note: "stripped-wav" };
     }
@@ -67,7 +67,7 @@ function ensureRawUlawBase64(inB64) {
         return { ok: false, reason: "ogg-container" };
     }
 
-    // Looks like raw ?-law bytes already
+    // Looks like raw μ-law bytes already
     return { ok: true, b64: inB64, note: "raw" };
 }
 
@@ -149,7 +149,7 @@ export function registerInboundRoutes(fastify) {
 
                 // Handle open event for ElevenLabs WebSocket
                 elevenLabsWs.on("open", () => {
-                    console.log("[II] Connected to Conversational AI. Sending dynamic variables�");
+                    console.log("[II] Connected to Conversational AI. Sending dynamic variables…");
                     elevenLabsWs.send(JSON.stringify({
                         type: "conversation_initiation_client_data",
                         dynamic_variables: {
@@ -187,30 +187,36 @@ export function registerInboundRoutes(fastify) {
                             console.info("[II] Received conversation initiation metadata.");
                             convoReady = true;
                             break;
-                        case "audio":
-                            if (message.audio_event?.audio_base_64) {
-                                const audioData = {
+                        // AFTER (replacement)
+                        case "audio": {
+                            const b64In = message.audio_event?.audio_base_64;
+                            if (!b64In) break;
+
+                            // one-time peek for debugging
+                            logFirstChunkInfo(b64In);
+
+                            // ensure Twilio gets RAW μ-law@8k (strip WAV if needed; reject MP3/Ogg)
+                            const ensured = ensureRawUlawBase64(b64In);
+                            if (!ensured.ok) {
+                                console.warn("[EL] Unsupported audio container:", ensured.reason, "— not sending to Twilio");
+                                break; // don't send unusable audio
+                            }
+                            if (ensured.note === "stripped-wav") {
+                                console.log("[EL] Received WAV μ-law — stripped header and forwarding raw bytes");
+                            }
+
+                            // Optional but tidy: send ~20ms frames (160 bytes each) to Twilio
+                            const raw = Buffer.from(ensured.b64, "base64");
+                            for (let off = 0; off < raw.length; off += 160) {
+                                const chunk = raw.subarray(off, Math.min(off + 160, raw.length)).toString("base64");
+                                connection.send(JSON.stringify({
                                     event: "media",
                                     streamSid,
-                                    media: {
-                                        payload: message.audio_event.audio_base_64,
-                                    },
-                                };
-                                connection.send(JSON.stringify(audioData));
+                                    media: { payload: chunk }
+                                }));
                             }
                             break;
-                        case "interruption":
-                            connection.send(JSON.stringify({ event: "clear", streamSid }));
-                            break;
-                        case "ping":
-                            if (message.ping_event?.event_id) {
-                                const pongResponse = {
-                                    type: "pong",
-                                    event_id: message.ping_event.event_id,
-                                };
-                                elevenLabsWs.send(JSON.stringify(pongResponse));
-                            }
-                            break;
+                        }
                     }
                 };
 
