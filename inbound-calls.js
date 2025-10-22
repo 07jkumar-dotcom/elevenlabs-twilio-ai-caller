@@ -1,85 +1,4 @@
 ﻿import WebSocket from "ws";
-// ---- AUDIO HELPERS (paste near top of file) ----
-function parseWavAndExtractData(wavBuf) {
-    // Basic RIFF/WAVE checks
-    if (wavBuf.slice(0, 4).toString() !== "RIFF" || wavBuf.slice(8, 12).toString() !== "WAVE") {
-        throw new Error("Not a WAV container");
-    }
-
-    let pos = 12; // start of first chunk after RIFF header
-    let audioFormat = null, numChannels = null, sampleRate = null, bitsPerSample = null;
-    let dataStart = null, dataSize = null;
-
-    while (pos + 8 <= wavBuf.length) {
-        const chunkId = wavBuf.slice(pos, pos + 4).toString();
-        const chunkSize = wavBuf.readUInt32LE(pos + 4);
-        const chunkStart = pos + 8;
-
-        if (chunkId === "fmt ") {
-            audioFormat = wavBuf.readUInt16LE(chunkStart + 0);   // 7 = u-law
-            numChannels = wavBuf.readUInt16LE(chunkStart + 2);   // expect 1
-            sampleRate = wavBuf.readUInt32LE(chunkStart + 4);   // expect 8000
-            bitsPerSample = wavBuf.readUInt16LE(chunkStart + 14);  // 8 for u-law in WAV
-        } else if (chunkId === "data") {
-            dataStart = chunkStart;
-            dataSize = chunkSize;
-        }
-
-        // Chunks are word-aligned; odd sizes have a pad byte
-        pos = chunkStart + chunkSize + (chunkSize % 2);
-
-        if (dataStart != null && audioFormat != null) break;
-    }
-
-    if (dataStart == null || dataSize == null) throw new Error("WAV has no data chunk");
-    return {
-        data: wavBuf.subarray(dataStart, dataStart + dataSize),
-        audioFormat, numChannels, sampleRate, bitsPerSample
-    };
-}
-
-function ensureRawUlawBase64(inB64) {
-    if (!inB64) return { ok: false, reason: "empty" };
-    const buf = Buffer.from(inB64, "base64");
-
-    // WAV? ("RIFF....WAVE")
-    if (buf.length >= 12 && buf.slice(0, 4).toString() === "RIFF" && buf.slice(8, 12).toString() === "WAVE") {
-        const info = parseWavAndExtractData(buf);
-        if (info.audioFormat !== 7) {
-            return { ok: false, reason: `wav-not-ulaw(fmt=${info.audioFormat})` };
-        }
-        if (info.sampleRate !== 8000) {
-            console.warn(`[WAV] sampleRate=${info.sampleRate} (expected 8000) — Twilio wants 8 kHz`);
-        }
-        if (info.numChannels !== 1) {
-            console.warn(`[WAV] channels=${info.numChannels} (expected mono) — Twilio wants mono`);
-        }
-        return { ok: true, b64: info.data.toString("base64"), note: "stripped-wav" };
-    }
-
-    // MP3? (ID3 or frame sync)
-    if (buf.length >= 3 && (buf.slice(0, 3).toString() === "ID3" || (buf[0] === 0xFF && (buf[1] & 0xE0) === 0xE0))) {
-        return { ok: false, reason: "mp3-container" };
-    }
-
-    // Ogg/Opus?
-    if (buf.length >= 4 && buf.slice(0, 4).toString() === "OggS") {
-        return { ok: false, reason: "ogg-container" };
-    }
-
-    // Looks like raw μ-law bytes already
-    return { ok: true, b64: inB64, note: "raw" };
-}
-
-let __loggedFirstChunk = false;
-function logFirstChunkInfo(b64) {
-    if (__loggedFirstChunk) return;
-    __loggedFirstChunk = true;
-    const buf = Buffer.from(b64 || "", "base64");
-    const head = buf.slice(0, 16).toString("hex");
-    console.log(`[EL audio] first 16 bytes: ${head} (len=${buf.length})`);
-}
-// ---- END AUDIO HELPERS ----
 export function registerInboundRoutes(fastify) {
     // Check for the required environment variables
     const { ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID } = process.env;
@@ -189,33 +108,14 @@ export function registerInboundRoutes(fastify) {
                             console.info("[II] Received conversation initiation metadata.");
                             convoReady = true;
                             break;
-                        // AFTER (replacement)
-                        case "audio": {
-                            const b64In = message.audio_event?.audio_base_64;
-                            if (!b64In) break;
-
-                            // one-time peek for debugging
-                            logFirstChunkInfo(b64In);
-
-                            // ensure Twilio gets RAW μ-law@8k (strip WAV if needed; reject MP3/Ogg)
-                            const ensured = ensureRawUlawBase64(b64In);
-                            if (!ensured.ok) {
-                                console.warn("[EL] Unsupported audio container:", ensured.reason, "— not sending to Twilio");
-                                break; // don't send unusable audio
-                            }
-                            if (ensured.note === "stripped-wav") {
-                                console.log("[EL] Received WAV μ-law — stripped header and forwarding raw bytes");
-                            }
-
-                            // Optional but tidy: send ~20ms frames (160 bytes each) to Twilio
-                            const raw = Buffer.from(ensured.b64, "base64");
-                            for (let off = 0; off < raw.length; off += 160) {
-                                const chunk = raw.subarray(off, Math.min(off + 160, raw.length)).toString("base64");
-                                connection.send(JSON.stringify({
+                        case "audio":
+                            if (message.audio_event?.audio_base_64) {
+                                const audioData = {
                                     event: "media",
                                     streamSid,
-                                    media: { payload: chunk }
-                                }));
+                                    media: { payload: message.audio_event.audio_base_64 },
+                                };
+                                connection.send(JSON.stringify(audioData));
                             }
                             break;
                         }
