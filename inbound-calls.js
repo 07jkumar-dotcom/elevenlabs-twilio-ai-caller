@@ -63,9 +63,11 @@ export function registerInboundRoutes(fastify) {
             try {
                 // Get authenticated WebSocket URL
                 const signedUrl = await getSignedUrl();
-
+                const u = new URL(signedUrl);
+                u.searchParams.set("output_format", "ulaw_8000");
+                const elevenLabsUrl = u.toString();
                 // Connect to ElevenLabs using the signed URL
-                elevenLabsWs = new WebSocket(signedUrl);
+                elevenLabsWs = new WebSocket(elevenLabsUrl);
 
                 // Handle open event for ElevenLabs WebSocket
                 elevenLabsWs.on("open", () => {
