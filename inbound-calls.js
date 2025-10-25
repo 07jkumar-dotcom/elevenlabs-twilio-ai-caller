@@ -50,7 +50,7 @@ export function registerInboundRoutes(fastify) {
     fastify.register(async (fastifyInstance) => {
         fastifyInstance.get("/media-stream", { websocket: true }, async (connection, req) => {
             console.info("[Server] Twilio connected to media stream.");
-
+            let outQueue = [];
             let streamSid = null;
             let elevenLabsWs = null;
             // Diagnostics
@@ -132,6 +132,10 @@ export function registerInboundRoutes(fastify) {
                             stats.elAudioFrames++;
                             stats.forwardedToTwilioBytes += Buffer.from(b64, "base64").length;
 
+                            if (!streamSid) {
+                                outQueue.push(b64);               // buffer until Twilio says "start"
+                                break;
+                            }
                             // Send to Twilio
                             connection.send(JSON.stringify({
                                 event: "media",
@@ -140,6 +144,7 @@ export function registerInboundRoutes(fastify) {
                             }));
 
                             // Optional: ask Twilio to ack when it’s queued (helpful to see it’s accepted)
+                            connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
                             connection.send(JSON.stringify({ event: "mark", streamSid, mark: { name: `el-${Date.now()}` } }));
                             break;
                         }
@@ -166,6 +171,11 @@ export function registerInboundRoutes(fastify) {
                             case "start":
                                 streamSid = data.start.streamSid;
                                 console.log(`[Twilio] Stream started with ID: ${streamSid}`);
+                                // flush any buffered EL audio
+                                while (outQueue.length) {
+                                    const b64 = outQueue.shift();
+                                    connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
+                                }
                                 break;
                             case "media":
                                 if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
