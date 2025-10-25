@@ -80,12 +80,6 @@ export function registerInboundRoutes(fastify) {
                 const u = new URL(signedUrl);
                 u.searchParams.set("output_format", "ulaw_8000");
                 const elevenLabsUrl = u.toString();
-
-                // Force EL to send raw μ-law 8k so Twilio can play it
-                const u = new URL(signedUrl);
-                u.searchParams.set("output_format", "ulaw_8000");
-                const elevenLabsUrl = u.toString();
-
                 // Connect to ElevenLabs using the signed URL
                 elevenLabsWs = new WebSocket(elevenLabsUrl);
 
@@ -155,9 +149,7 @@ export function registerInboundRoutes(fastify) {
                             break;
                         }
                         case "interruption":
-                            console.warn("[EL] interruption received — NOT clearing playback for now");
-                            // If you truly want barge-in, only send clear when you are about to stream new speech immediately.
-                            // connection.send(JSON.stringify({ event: "clear", streamSid }));
+                            connection.send(JSON.stringify({ event: "clear", streamSid }));
                             break;
                         case "ping":
                             if (message.ping_event?.event_id) {
