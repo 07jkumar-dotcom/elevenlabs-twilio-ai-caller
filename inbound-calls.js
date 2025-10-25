@@ -1,27 +1,5 @@
 ﻿import WebSocket from "ws";
-// ---- PROCESS DIAGNOSTICS ----
-process.on('SIGTERM', () => {
-    console.warn('[PROC] SIGTERM received — starting graceful shutdown');
-    // Give yourself a few seconds to log close reasons before exit.
-    setTimeout(() => {
-        console.warn('[PROC] Exiting after SIGTERM grace period');
-        process.exit(0);
-    }, 8000).unref();
-});
 
-process.on('SIGINT', () => {
-    console.warn('[PROC] SIGINT received — shutting down');
-    process.exit(0);
-});
-
-process.on('uncaughtException', (err) => {
-    console.error('[PROC] uncaughtException:', err);
-});
-
-process.on('unhandledRejection', (reason, p) => {
-    console.error('[PROC] unhandledRejection:', reason);
-});
-// ---- END PROCESS DIAGNOSTICS ----
 export function registerInboundRoutes(fastify) {
     // Check for the required environment variables
     const { ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID } = process.env;
@@ -75,6 +53,20 @@ export function registerInboundRoutes(fastify) {
 
             let streamSid = null;
             let elevenLabsWs = null;
+            // Diagnostics
+            let stats = {
+                twilioMediaInFrames: 0,      // frames received from Twilio
+                forwardedToELBytes: 0,       // bytes sent to ElevenLabs
+                elAudioFrames: 0,            // audio frames received from ElevenLabs
+                forwardedToTwilioBytes: 0    // bytes sent back to Twilio
+            };
+
+            const statsTimer = setInterval(() => {
+                console.log(`[STATS] in(Twilio frames)=${stats.twilioMediaInFrames} -> EL(bytes)=${stats.forwardedToELBytes} | in(EL frames)=${stats.elAudioFrames} -> Twilio(bytes)=${stats.forwardedToTwilioBytes}`);
+            }, 5000);
+            connection.on("close", () => clearInterval(statsTimer));
+            //Diagnostics end
+
             const DateVar = req.query?.Date || new Date().toISOString().slice(0, 10);
             const TimeVar = req.query?.Time || new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
             const NameVar = req.query?.Name || "Caller";
@@ -127,10 +119,13 @@ export function registerInboundRoutes(fastify) {
                 // Function to handle messages from ElevenLabs
                 const handleElevenLabsMessage = (message, connection) => {
                     switch (message.type) {
-                        case "conversation_initiation_metadata":
+                        case "conversation_initiation_metadata": {
+                            const meta = message.conversation_initiation_metadata_event || {};
                             console.info("[II] Received conversation initiation metadata.");
+                            console.info(`[II] Formats: agent_output=${meta.agent_output_audio_format} | user_input=${meta.user_input_audio_format}`);
                             convoReady = true;
                             break;
+                        }
                         case "audio":
                             if (message.audio_event?.audio_base_64) {
                                 const audioData = {
