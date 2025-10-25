@@ -149,7 +149,9 @@ export function registerInboundRoutes(fastify) {
                             break;
                         }
                         case "interruption":
-                            connection.send(JSON.stringify({ event: "clear", streamSid }));
+                            console.warn("[EL] interruption received — NOT clearing playback for now");
+                            // If you truly want barge-in, only send clear when you are about to stream new speech immediately.
+                            // connection.send(JSON.stringify({ event: "clear", streamSid }));
                             break;
                         case "ping":
                             if (message.ping_event?.event_id) {
