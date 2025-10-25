@@ -80,6 +80,12 @@ export function registerInboundRoutes(fastify) {
                 const u = new URL(signedUrl);
                 u.searchParams.set("output_format", "ulaw_8000");
                 const elevenLabsUrl = u.toString();
+
+                // Force EL to send raw μ-law 8k so Twilio can play it
+                const u = new URL(signedUrl);
+                u.searchParams.set("output_format", "ulaw_8000");
+                const elevenLabsUrl = u.toString();
+
                 // Connect to ElevenLabs using the signed URL
                 elevenLabsWs = new WebSocket(elevenLabsUrl);
 
