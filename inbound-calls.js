@@ -1,5 +1,27 @@
 ﻿import WebSocket from "ws";
+// ---- PROCESS DIAGNOSTICS ----
+process.on('SIGTERM', () => {
+    console.warn('[PROC] SIGTERM received — starting graceful shutdown');
+    // Give yourself a few seconds to log close reasons before exit.
+    setTimeout(() => {
+        console.warn('[PROC] Exiting after SIGTERM grace period');
+        process.exit(0);
+    }, 8000).unref();
+});
 
+process.on('SIGINT', () => {
+    console.warn('[PROC] SIGINT received — shutting down');
+    process.exit(0);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('[PROC] uncaughtException:', err);
+});
+
+process.on('unhandledRejection', (reason, p) => {
+    console.error('[PROC] unhandledRejection:', reason);
+});
+// ---- END PROCESS DIAGNOSTICS ----
 export function registerInboundRoutes(fastify) {
     // Check for the required environment variables
     const { ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID } = process.env;
