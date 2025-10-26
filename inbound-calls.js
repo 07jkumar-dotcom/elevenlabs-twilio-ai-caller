@@ -133,19 +133,15 @@ export function registerInboundRoutes(fastify) {
                             stats.forwardedToTwilioBytes += Buffer.from(b64, "base64").length;
 
                             if (!streamSid) {
-                                outQueue.push(b64);               // buffer until Twilio says "start"
+                                outQueue.push(b64);
                                 break;
                             }
-                            // Send to Twilio
+                            // Send to Twilio (only once)
                             connection.send(JSON.stringify({
                                 event: "media",
                                 streamSid,
                                 media: { payload: b64 }
                             }));
-
-                            // Optional: ask Twilio to ack when it’s queued (helpful to see it’s accepted)
-                            connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
-                            connection.send(JSON.stringify({ event: "mark", streamSid, mark: { name: `el-${Date.now()}` } }));
                             break;
                         }
                         case "interruption":
