@@ -142,7 +142,10 @@ export function registerInboundRoutes(fastify) {
                             connection.send(JSON.stringify({
                                 event: "media",
                                 streamSid,
-                                media: { payload: b64 }
+                                media: {
+                                    track: "outbound",
+                                    payload: b64
+                                }
                             }));
 
                             // Optional: ask Twilio to ack when it’s queued (helpful to see it’s accepted)
