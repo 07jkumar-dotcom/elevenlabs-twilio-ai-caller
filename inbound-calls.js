@@ -93,7 +93,7 @@ export function registerInboundRoutes(fastify) {
                             Date: DateVar,
                             Time: TimeVar,
                             Name: NameVar,
-                            Contact_Details: ContactVar,
+                            Contact_Details: ContactVar, 
                         },
                     }));
                 });
@@ -165,7 +165,7 @@ export function registerInboundRoutes(fastify) {
                                 streamSid = data.start.streamSid;
                                 console.log("[Twilio] Stream started with ID:", streamSid);
                                 // optional sanity: a short beep so you know return audio works
-                                // sendBeep(connection, streamSid, 0.2);
+                                sendBeep(connection, streamSid, 0.2);
                                 // flush any outQueue (if you buffered EL audio)
                                 while (outQueue.length) {
                                     const b64 = outQueue.shift();
