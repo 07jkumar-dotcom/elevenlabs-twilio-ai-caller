@@ -1,4 +1,6 @@
 ﻿import WebSocket from "ws";
+function linearToUlaw(x) { const B = 0x84, C = 32635; let s = Math.max(-C, Math.min(C, x)); const sign = s < 0 ? 0x80 : 0x00; if (s < 0) s = -s; s += B; let e = 7, m; for (let mask = 0x4000; (s & mask) === 0 && e > 0; mask >>= 1)e--; m = (s >> ((e === 0) ? 4 : (e + 3))) & 0x0F; return (~(sign | (e << 4) | m)) & 0xFF; }
+function sendBeep(conn, sid, sec = 0.2) { const sr = 8000, f = 880, n = Math.floor(sr * sec), buf = Buffer.alloc(n); for (let i = 0; i < n; i++) { const pcm = Math.round(Math.sin(2 * Math.PI * f * (i / sr)) * 12000); buf[i] = linearToUlaw(pcm); } for (let off = 0; off < buf.length; off += 160) { const chunk = buf.subarray(off, Math.min(off + 160, buf.length)); conn.send(JSON.stringify({ event: "media", streamSid: sid, media: { payload: chunk.toString("base64") } })); } }
 
 export function registerInboundRoutes(fastify) {
     // Check for the required environment variables
@@ -170,7 +172,8 @@ export function registerInboundRoutes(fastify) {
                         switch (data.event) {
                             case "start":
                                 streamSid = data.start.streamSid;
-                                console.log(`[Twilio] Stream started with ID: ${streamSid}`);
+                                console.log(`[Twilio] Stream started with ID: ${streamSid}`)
+                                sendBeep(connection, streamSid, 0.2);                                    ;
                                 // flush any buffered EL audio
                                 while (outQueue.length) {
                                     const b64 = outQueue.shift();
