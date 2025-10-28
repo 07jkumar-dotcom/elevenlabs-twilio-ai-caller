@@ -171,11 +171,15 @@ export function registerInboundRoutes(fastify) {
                             case "start":
                                 streamSid = data.start.streamSid;
                                 console.log(`[Twilio] Stream started with ID: ${streamSid}`);
-                                // flush any buffered EL audio
+
+                                // If ElevenLabs fed us audio before 'start', you already flush your outQueue here.
                                 while (outQueue.length) {
                                     const b64 = outQueue.shift();
                                     connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
                                 }
+
+                                // >>> Beep test: play a 250ms tone as soon as the stream is ready
+                                sendBeep({ ws: connection, streamSid, label: "beep_on_start" });
                                 break;
                             case "media":
                                 if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
