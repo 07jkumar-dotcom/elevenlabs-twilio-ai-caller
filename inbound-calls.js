@@ -181,6 +181,9 @@ export function registerInboundRoutes(fastify) {
                                 // >>> Beep test: play a 250ms tone as soon as the stream is ready
                                 sendBeep({ ws: connection, streamSid, label: "beep_on_start" });
                                 break;
+                            case "mark":
+                                console.log(`[Twilio] Played buffered audio: mark='${data.mark?.name}'`);
+                                break;
                             case "media":
                                 if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
                                     const audioMessage = {
