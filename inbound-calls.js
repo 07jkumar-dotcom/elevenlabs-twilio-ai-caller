@@ -144,10 +144,6 @@ export function registerInboundRoutes(fastify) {
                                 streamSid,
                                 media: { payload: b64 }
                             }));
-
-                            // Optional: ask Twilio to ack when it’s queued (helpful to see it’s accepted)
-                            connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
-                            connection.send(JSON.stringify({ event: "mark", streamSid, mark: { name: `el-${Date.now()}` } }));
                             break;
                         }
                         case "interruption":
@@ -185,6 +181,7 @@ export function registerInboundRoutes(fastify) {
                                 break;
                             case "mark":
                                 console.log(`[Twilio] Played buffered audio: mark='${data.mark?.name}'`);
+                                break;
                             case "media": {
                                 if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
                                     // === FIX: increment inbound Twilio stats ===
