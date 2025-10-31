@@ -62,8 +62,10 @@ export function registerInboundRoutes(fastify) {
             };
 
             const statsTimer = setInterval(() => {
-                console.log(`[STATS] in(Twilio frames)=${stats.twilioMediaInFrames} -> EL(bytes)=${stats.forwardedToELBytes} | in(EL frames)=${stats.elAudioFrames} -> Twilio(bytes)=${stats.forwardedToTwilioBytes}`);
-            }, 5000);
+                console.log(
+                    `[STATS] in(Twilio frames)=${stats.twilioMediaInFrames} -> EL(bytes)=${stats.forwardedToELBytes} | ` +
+                    `in(EL frames)=${stats.elAudioFrames} -> Twilio(bytes)=${stats.forwardedToTwilioBytes}`
+                );
             connection.on("close", () => clearInterval(statsTimer));
             //Diagnostics end
 
@@ -183,18 +185,19 @@ export function registerInboundRoutes(fastify) {
                                 break;
                             case "mark":
                                 console.log(`[Twilio] Played buffered audio: mark='${data.mark?.name}'`);
-                                break;
-                            case "media":
+                            case "media": {
                                 if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
+                                    // === FIX: increment inbound Twilio stats ===
+                                    stats.twilioMediaInFrames++;
+                                    stats.forwardedToELBytes += Buffer.from(data.media.payload, "base64").length;
+
                                     const audioMessage = {
-                                        user_audio_chunk: Buffer.from(
-                                            data.media.payload,
-                                            "base64"
-                                        ).toString("base64"),
+                                        user_audio_chunk: Buffer.from(data.media.payload, "base64").toString("base64"),
                                     };
                                     elevenLabsWs.send(JSON.stringify(audioMessage));
                                 }
                                 break;
+                            }
                             case "stop":
                                 if (elevenLabsWs) {
                                     elevenLabsWs.close();
