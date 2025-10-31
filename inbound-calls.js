@@ -66,6 +66,7 @@ export function registerInboundRoutes(fastify) {
                     `[STATS] in(Twilio frames)=${stats.twilioMediaInFrames} -> EL(bytes)=${stats.forwardedToELBytes} | ` +
                     `in(EL frames)=${stats.elAudioFrames} -> Twilio(bytes)=${stats.forwardedToTwilioBytes}`
                 );
+            }, 4000);
             connection.on("close", () => clearInterval(statsTimer));
             //Diagnostics end
 
@@ -164,7 +165,7 @@ export function registerInboundRoutes(fastify) {
                 // Handle messages from Twilio
                 connection.on("message", async (message) => {
                     try {
-                        const data = JSON.parse(message);
+                        const data = JSON.parse(message.toString());
                         switch (data.event) {
                             case "start":
                                 streamSid = data.start.streamSid;
@@ -175,9 +176,6 @@ export function registerInboundRoutes(fastify) {
                                     const b64 = outQueue.shift();
                                     connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
                                 }
-
-                                // >>> Beep test: play a 250ms tone as soon as the stream is ready
-                                sendBeep({ ws: connection, streamSid, label: "beep_on_start" });
                                 break;
                             case "mark":
                                 console.log(`[Twilio] Played buffered audio: mark='${data.mark?.name}'`);
