@@ -197,7 +197,7 @@ export function registerInboundRoutes(fastify) {
                                 console.log(`[Twilio] Received unhandled event: ${data.event}`);
                         }
                     } catch (error) {
-                        console.error("[Twilio] Error processing message:", error);
+                        console.error("[Twilio] Error processing messagee:", error);
                     }
                 });
 
