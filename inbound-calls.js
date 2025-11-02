@@ -50,6 +50,7 @@ export function registerInboundRoutes(fastify) {
     fastify.register(async (fastifyInstance) => {
         fastifyInstance.get("/media-stream", { websocket: true }, async (connection, req) => {
             console.info("[Server] Twilio connected to media stream.");
+            connection.on("message", async (message) => { ... });
             let outQueue = [];
             let streamSid = null;
             let elevenLabsWs = null;
@@ -62,11 +63,8 @@ export function registerInboundRoutes(fastify) {
             };
 
             const statsTimer = setInterval(() => {
-                console.log(
-                    `[STATS] in(Twilio frames)=${stats.twilioMediaInFrames} -> EL(bytes)=${stats.forwardedToELBytes} | ` +
-                    `in(EL frames)=${stats.elAudioFrames} -> Twilio(bytes)=${stats.forwardedToTwilioBytes}`
-                );
-            }, 4000);
+                console.log(`[STATS] in(Twilio frames)=${stats.twilioMediaInFrames} -> EL(bytes)=${stats.forwardedToELBytes} | in(EL frames)=${stats.elAudioFrames} -> Twilio(bytes)=${stats.forwardedToTwilioBytes}`);
+            }, 5000);
             connection.on("close", () => clearInterval(statsTimer));
             //Diagnostics end
 
@@ -95,7 +93,7 @@ export function registerInboundRoutes(fastify) {
                             Date: DateVar,
                             Time: TimeVar,
                             Name: NameVar,
-                            Contact_Details: ContactVar,
+                            Contact_Details: ContactVar, 
                         },
                     }));
                 });
@@ -132,19 +130,15 @@ export function registerInboundRoutes(fastify) {
                         case "audio": {
                             const b64 = message.audio_event?.audio_base_64;
                             if (!b64) break;
-                            stats.elAudioFrames++;
-                            stats.forwardedToTwilioBytes += Buffer.from(b64, "base64").length;
 
-                            if (!streamSid) {
-                                outQueue.push(b64);               // buffer until Twilio says "start"
+                            if (!streamSid) {             // Twilio not started yet → buffer
+                                outQueue.push(b64);
                                 break;
                             }
-                            // Send to Twilio
-                            connection.send(JSON.stringify({
-                                event: "media",
-                                streamSid,
-                                media: { payload: b64 }
-                            }));
+
+                            connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
+                            connection.send(JSON.stringify({ event: "mark", streamSid, mark: { name: `el-${Date.now()}` } }));
+                            // stats.forwardedToTwilioBytes += Buffer.from(b64, "base64").length; // count here (after send)
                             break;
                         }
                         case "interruption":
@@ -165,34 +159,33 @@ export function registerInboundRoutes(fastify) {
                 // Handle messages from Twilio
                 connection.on("message", async (message) => {
                     try {
-                        const data = JSON.parse(message.toString());
+                        const data = JSON.parse(message);
                         switch (data.event) {
                             case "start":
                                 streamSid = data.start.streamSid;
-                                console.log(`[Twilio] Stream started with ID: ${streamSid}`);
-
-                                // If ElevenLabs fed us audio before 'start', you already flush your outQueue here.
+                                console.log("[Twilio] Stream started with ID:", streamSid);
+                                // optional sanity: a short beep so you know return audio works
+                                sendBeep(connection, streamSid, 0.2);
+                                // flush any outQueue (if you buffered EL audio)
                                 while (outQueue.length) {
                                     const b64 = outQueue.shift();
                                     connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
                                 }
                                 break;
                             case "mark":
-                                console.log(`[Twilio] Played buffered audio: mark='${data.mark?.name}'`);
+                                console.log("[Twilio] mark ack:", data.mark?.name);
                                 break;
-                            case "media": {
+                            case "media":
                                 if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
-                                    // === FIX: increment inbound Twilio stats ===
-                                    stats.twilioMediaInFrames++;
-                                    stats.forwardedToELBytes += Buffer.from(data.media.payload, "base64").length;
-
                                     const audioMessage = {
-                                        user_audio_chunk: Buffer.from(data.media.payload, "base64").toString("base64"),
+                                        user_audio_chunk: Buffer.from(
+                                            data.media.payload,
+                                            "base64"
+                                        ).toString("base64"),
                                     };
                                     elevenLabsWs.send(JSON.stringify(audioMessage));
                                 }
                                 break;
-                            }
                             case "stop":
                                 if (elevenLabsWs) {
                                     elevenLabsWs.close();
