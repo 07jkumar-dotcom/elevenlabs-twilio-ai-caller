@@ -10,7 +10,7 @@ dotenv.config();
 
 // Initialize Fastify server
 const fastify = Fastify({
-  logger: true // Enable logging
+    logger: true // Enable logging
 });
 
 fastify.register(fastifyFormBody);
@@ -20,29 +20,29 @@ const PORT = process.env.PORT || 8000;
 
 // Root route for health check
 fastify.get("/", async (_, reply) => {
-  reply.send({ message: "Server is running" });
+    reply.send({ message: "Server is running" });
 });
 
 // Start the Fastify server
 const start = async () => {
-  try {
-    // Register route handlers
-    await registerInboundRoutes(fastify);
-    await registerOutboundRoutes(fastify);
+    try {
+        // Register route handlers
+        await registerInboundRoutes(fastify);
+        await registerOutboundRoutes(fastify);
 
-    // Start listening
-    await fastify.listen({ port: PORT, host: '0.0.0.0' });
-    console.log(`[Server] Listening on port ${PORT}`);
-  } catch (err) {
-    fastify.log.error(err);
-    process.exit(1);
-  }
+        // Start listening
+        await fastify.listen({ port: PORT, host: '0.0.0.0' });
+        console.log(`[Server] Listening on port ${PORT}`);
+    } catch (err) {
+        fastify.log.error(err);
+        process.exit(1);
+    }
 };
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
-  console.error('Unhandled rejection:', err);
-  process.exit(1);
+    console.error('Unhandled rejection:', err);
+    process.exit(1);
 });
 
 start();
