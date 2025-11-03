@@ -150,9 +150,9 @@ export function registerInboundRoutes(fastify) {
                     }));
                 });
                 // Handle messages from ElevenLabs
-                elevenLabsWs.on("message", (data) => {
+                elevenLabsWs.on("message", (raw) => {
                     try {
-                        const msg = JSON.parse(data);
+                        const msg = JSON.parse(raw);
                         // Handle common EL audio field names; adjust to your payload if different
                         const b64 =
                             msg.agent_audio_chunk ||
@@ -244,17 +244,9 @@ export function registerInboundRoutes(fastify) {
                         switch (data.event) {
                             case "start":
                                 streamSid = data.start.streamSid;
-                                // log Twilio media format so you can sanity-check 8k ulaw
                                 const fmt = data.start.mediaFormat || {};
                                 console.log(`[Twilio] start sid=${streamSid} encoding=${fmt.encoding} rate=${fmt.sampleRate} ch=${fmt.channels}`);
-                                // flush any buffered EL audio
-                                while (outQueue.length) {
-                                    const b64 = outQueue.shift();
-                                    // count the bytes we send during the initial flush
-                                    stats.forwardedToTwilioBytes += Buffer.from(b64, "base64").length;
-                                    connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
-                                }
-                                // start the pacer
+                                // Do NOT flush the whole queue at once; let the pacer drain it
                                 startPacer();
                                 break;
                             case "media":
@@ -277,9 +269,6 @@ export function registerInboundRoutes(fastify) {
                                 }
                                 break;
                             case "stop":
-                                if (elevenLabsWs) {
-                                    elevenLabsWs.close();
-                                }
                                 stopPacer();
                                 console.log(`[Twilio] stream ${data.streamSid} stopped by Twilio`);
                                 break;
@@ -294,9 +283,6 @@ export function registerInboundRoutes(fastify) {
                 // Handle close event from Twilio
                 connection.on("close", () => {
                     stopPacer();
-                    if (elevenLabsWs) {
-                        elevenLabsWs.close();
-                    }
                     console.log("[Twilio] Client disconnected");
                 });
 
