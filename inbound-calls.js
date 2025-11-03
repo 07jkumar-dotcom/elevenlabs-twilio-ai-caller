@@ -137,15 +137,26 @@ export function registerInboundRoutes(fastify) {
                                 break;
                             }
                             // Send to Twilio
+                            if (message.audio_event?.audio_base_64) {
+                                const audioData = {
+                                    event: "media",
+                                    streamSid,
+                                    media: {
+                                        payload: message.audio_event.audio_base_64,
+                                    },
+                                };
+                                connection.send(JSON.stringify(audioData));
+                            }
+                            break;
+                            // Send to Twilio
                             connection.send(JSON.stringify({
                                 event: "media",
                                 streamSid,
-                                media: { payload: b64 }
+                                media: {
+                                    payload: message.audio_event.audio_base_64,
+                                },
                             }));
-
-                            // Optional: ask Twilio to ack when it’s queued (helpful to see it’s accepted)
-                            connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
-                            connection.send(JSON.stringify({ event: "mark", streamSid, mark: { name: `el-${Date.now()}` } }));
+                            break;
                             break;
                         }
                         case "interruption":
