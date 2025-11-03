@@ -61,10 +61,10 @@ export function registerInboundRoutes(fastify) {
                 forwardedToTwilioBytes: 0    // bytes sent back to Twilio
             };
             // --- Outbound pacing to Twilio: 160B @ 50fps (20ms) ---
+            // (reuses your existing `outQueue` — do NOT redeclare it)
             const FRAME_BYTES = 160;
             const FRAME_INTERVAL_MS = 20;
             let pacerTimer = null;
-            const outQueue = outQueue || []; // keep your existing queue if present
 
             function startPacer() {
                 if (pacerTimer) return;
@@ -74,12 +74,12 @@ export function registerInboundRoutes(fastify) {
                         if (!streamSid) return;
                         const b64 = outQueue.shift();
                         if (!b64) return;
-                        // send exactly one 20ms frame
                         connection.send(JSON.stringify({
                             event: "media",
                             streamSid,
                             media: { payload: b64 }
                         }));
+                        // count bytes actually sent
                         stats.forwardedToTwilioBytes += Buffer.from(b64, "base64").length;
                     } catch (e) {
                         console.warn("[Pacer] send error:", e?.message);
@@ -94,11 +94,11 @@ export function registerInboundRoutes(fastify) {
             }
 
             function stripWaveIfNeeded(buf) {
-                // If EL ever wraps ulaw in a WAV container, strip to raw data chunk
+                // If EL wraps μ-law in WAV, strip to raw 'data' chunk
                 if (buf.length >= 12 && buf.slice(0, 4).toString() === "RIFF") {
                     const dataIdx = buf.indexOf(Buffer.from("data"));
                     if (dataIdx > 0 && dataIdx + 8 <= buf.length) {
-                        return buf.subarray(dataIdx + 8); // skip 'data' + chunk size (4B)
+                        return buf.subarray(dataIdx + 8); // skip 'data' + chunk size
                     }
                 }
                 return buf;
@@ -113,7 +113,7 @@ export function registerInboundRoutes(fastify) {
                     outQueue.push(frame.toString("base64"));
                 }
             }
-
+            //Diagnostics
             const statsTimer = setInterval(() => {
                 console.log(`[STATS] in(Twilio frames)=${stats.twilioMediaInFrames} -> EL(bytes)=${stats.forwardedToELBytes} | in(EL frames)=${stats.elAudioFrames} -> Twilio(bytes)=${stats.forwardedToTwilioBytes}`);
             }, 5000);
