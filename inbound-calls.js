@@ -150,32 +150,71 @@ export function registerInboundRoutes(fastify) {
                     }));
                 });
                 // Handle messages from ElevenLabs
-                elevenLabsWs.on("message", (raw) => {
+                elevenLabsWs.on("message", (data) => {
                     try {
-                        const msg = JSON.parse(raw);
-                        // Handle common EL audio field names; adjust to your payload if different
-                        const b64 =
-                            msg.agent_audio_chunk ||
-                            msg.audio_base64 ||
-                            (msg.audio && msg.audio.chunk) ||
-                            null;
+                        const text = Buffer.isBuffer(data) ? data.toString("utf8") : data;
+                        const msg = JSON.parse(text);
+
+                        // 1) Mark conversation ready when we get initiation metadata (cover multiple shapes)
+                        if (
+                            !convoReady && (
+                                msg.type === "conversation_initiation_metadata" ||
+                                msg.event === "conversation_initiation_metadata" ||
+                                msg.conversation_initiation_metadata ||
+                                msg.conversation_initiation_metadata_event
+                            )
+                        ) {
+                            const meta =
+                                msg.conversation_initiation_metadata ||
+                                msg.conversation_initiation_metadata_event ||
+                                {};
+                            console.info("[II] Received conversation initiation metadata.");
+                            if (meta.agent_output_audio_format || meta.user_input_audio_format) {
+                                console.info(
+                                    `[II] Formats: agent_output=${meta.agent_output_audio_format} | user_input=${meta.user_input_audio_format}`
+                                );
+                            }
+                            convoReady = true;
+                        }
+
+                        // 2) Extract audio and enqueue for paced send to Twilio
+                        let b64 = null;
+                        if (msg.type === "audio" && msg.audio_event && msg.audio_event.audio_base_64) {
+                            b64 = msg.audio_event.audio_base_64; // EL "audio" event shape
+                        } else if (msg.agent_audio_chunk) {
+                            b64 = msg.agent_audio_chunk;
+                        } else if (msg.audio_base64) {
+                            b64 = msg.audio_base64;
+                        } else if (msg.audio && (msg.audio.chunk || msg.audio.base64)) {
+                            b64 = msg.audio.chunk || msg.audio.base64;
+                        }
+
                         if (b64) {
                             stats.elAudioFrames++;
                             enqueueELBase64(b64); // packetize to 160B frames
                         }
-                        // ... handle other EL events/logging as you already do ...
                     } catch (e) {
                         console.error("EL ws parse error", e);
                     }
                 });
 
+                // Fallback: if EL never sends initiation metadata, proceed after 1500ms
+                let elReadyFallbackTimer = setTimeout(() => {
+                    if (!convoReady) {
+                        console.warn("[II] No initiation metadata from EL after 1500ms — proceeding anyway.");
+                        convoReady = true;
+                    }
+                }, 1500);
+
                 // Handle errors from ElevenLabs WebSocket
                 elevenLabsWs.on("error", (error) => {
+                    clearTimeout(elReadyFallbackTimer);
                     console.error("[II] WebSocket error:", error);
                 });
 
                 // Handle close event for ElevenLabs WebSocket
                 elevenLabsWs.on("close", () => {
+                    clearTimeout(elReadyFallbackTimer);
                     console.log("[II] Disconnected.");
                 });
 
