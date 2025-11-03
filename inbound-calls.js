@@ -280,52 +280,71 @@ export function registerInboundRoutes(fastify) {
                 };
 
                 // Handle messages from Twilio
-                connection.on("message", async (message) => {
+                connection.on("message", async (wsData) => {
+                    // Always parse first
+                    let msg;
                     try {
-                        const data = JSON.parse(message);
-                        switch (data.event) {
+                        const text =
+                            Buffer.isBuffer(wsData)
+                                ? wsData.toString("utf8")
+                                : typeof wsData === "string"
+                                    ? wsData
+                                    : Buffer.from(wsData).toString("utf8"); // ArrayBuffer/Uint8Array fallback
+                        msg = JSON.parse(text);
+                    } catch (err) {
+                        console.error("[Twilio] JSON parse error:", err);
+                        return;
+                    }
+
+                    try {
+                        switch (msg.event) {
                             case "start": {
-                                // set from start
+                                // streamSid from start
                                 if (msg.start && msg.start.streamSid) {
                                     streamSid = msg.start.streamSid;
                                 }
                                 const fmt = (msg.start && msg.start.mediaFormat) || {};
-                                console.log(`[Twilio] start sid=${streamSid} encoding=${fmt.encoding} rate=${fmt.sampleRate} ch=${fmt.channels}`);
-                                startPacer(); // safe to call multiple times; it no-ops if already running
-                                break;
+                                console.log(
+                                    `[Twilio] start sid=${streamSid} encoding=${fmt.encoding} rate=${fmt.sampleRate} ch=${fmt.channels}`
+                                );
+                                // Begin paced output loop (no-ops if already running)
+                                startPacer();
+                                return;
                             }
+
                             case "media": {
-                                // If we somehow missed the start event, infer streamSid from media
+                                // If we somehow missed "start", infer the sid from the media event
                                 if (!streamSid && msg.streamSid) {
                                     streamSid = msg.streamSid;
                                     console.log(`[Twilio] inferred streamSid=${streamSid} from media; starting pacer`);
                                     startPacer();
                                 }
 
-                                // Always count total frames Twilio sent
+                                // Count every Twilio frame
                                 stats.twilioMediaTotalFrames = (stats.twilioMediaTotalFrames || 0) + 1;
 
-                                const buf = Buffer.from(msg.media.payload, "base64");
-
                                 // Forward to ElevenLabs as soon as its WS is open
-                                if (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
+                                const payloadB64 = msg.media && msg.media.payload;
+                                if (payloadB64 && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
+                                    const buf = Buffer.from(payloadB64, "base64");
                                     stats.twilioMediaInFrames++;
                                     stats.forwardedToELBytes += buf.length;
-                                    elevenLabsWs.send(JSON.stringify({ user_audio_chunk: buf.toString("base64") }));
+                                    elevenLabsWs.send(JSON.stringify({ user_audio_chunk: payloadB64 }));
                                 }
-                                break;
+                                return;
                             }
+
                             case "stop": {
                                 stopPacer();
-                                console.log(`[Twilio] stream ${data.streamSid} stopped by Twilio`);
-                                break;
+                                return;
                             }
-                            default: {
-                                console.log(`[Twilio] Received unhandled event: ${data.event}`);
-                            }
+
+                            default:
+                                // ignore other events
+                                return;
                         }
-                    } catch (error) {
-                        console.error("[Twilio] Error processing message:", error);
+                    } catch (err) {
+                        console.error("[Twilio] Error processing message:", err);
                     }
                 });
 
