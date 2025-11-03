@@ -285,29 +285,32 @@ export function registerInboundRoutes(fastify) {
                         const data = JSON.parse(message);
                         switch (data.event) {
                             case "start": {
-                                streamSid = data.start.streamSid;
-                                const fmt = data.start.mediaFormat || {};
+                                // set from start
+                                if (msg.start && msg.start.streamSid) {
+                                    streamSid = msg.start.streamSid;
+                                }
+                                const fmt = (msg.start && msg.start.mediaFormat) || {};
                                 console.log(`[Twilio] start sid=${streamSid} encoding=${fmt.encoding} rate=${fmt.sampleRate} ch=${fmt.channels}`);
-                                // Do NOT flush the whole queue at once; let the pacer drain it
-                                startPacer();
+                                startPacer(); // safe to call multiple times; it no-ops if already running
                                 break;
                             }
                             case "media": {
-                                if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
-                                    const audioMessage = {
-                                        user_audio_chunk: Buffer.from(
-                                            data.media.payload,
-                                            "base64"
-                                        ).toString("base64"),
-                                    };
-                                    elevenLabsWs.send(JSON.stringify(audioMessage));
+                                // If we somehow missed the start event, infer streamSid from media
+                                if (!streamSid && msg.streamSid) {
+                                    streamSid = msg.streamSid;
+                                    console.log(`[Twilio] inferred streamSid=${streamSid} from media; starting pacer`);
+                                    startPacer();
                                 }
-                                if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
-                                    // count Twilio inbound frames and bytes forwarded to EL
+
+                                // Always count total frames Twilio sent
+                                stats.twilioMediaTotalFrames = (stats.twilioMediaTotalFrames || 0) + 1;
+
+                                const buf = Buffer.from(msg.media.payload, "base64");
+
+                                // Forward to ElevenLabs as soon as its WS is open
+                                if (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
                                     stats.twilioMediaInFrames++;
-                                    const buf = Buffer.from(data.media.payload, "base64");
                                     stats.forwardedToELBytes += buf.length;
-                                    // forward to ElevenLabs (same payload, just normalized)
                                     elevenLabsWs.send(JSON.stringify({ user_audio_chunk: buf.toString("base64") }));
                                 }
                                 break;
