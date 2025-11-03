@@ -205,7 +205,7 @@ export function registerInboundRoutes(fastify) {
                                 if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
                                     // count Twilio inbound frames and bytes forwarded to EL
                                     stats.twilioMediaInFrames++;
-                                    stats.forwardedToELBytes += Buffer.from(data.media.payload, "base64").length;
+                                    const buf = Buffer.from(data.media.payload, "base64");
                                     stats.forwardedToELBytes += buf.length;
                                     // forward to ElevenLabs (same payload, just normalized)
                                     elevenLabsWs.send(JSON.stringify({ user_audio_chunk: buf.toString("base64") }));
