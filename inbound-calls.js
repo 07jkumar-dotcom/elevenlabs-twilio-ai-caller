@@ -262,10 +262,11 @@ export function registerInboundRoutes(fastify) {
                             break;
                             break;
                         }
-                        case "interruption":
+                        case "interruption": {
                             connection.send(JSON.stringify({ event: "clear", streamSid }));
                             break;
-                        case "ping":
+                        }
+                        case "ping": {
                             if (message.ping_event?.event_id) {
                                 const pongResponse = {
                                     type: "pong",
@@ -274,6 +275,7 @@ export function registerInboundRoutes(fastify) {
                                 elevenLabsWs.send(JSON.stringify(pongResponse));
                             }
                             break;
+                        }
                     }
                 };
 
@@ -282,14 +284,15 @@ export function registerInboundRoutes(fastify) {
                     try {
                         const data = JSON.parse(message);
                         switch (data.event) {
-                            case "start":
+                            case "start": {
                                 streamSid = data.start.streamSid;
                                 const fmt = data.start.mediaFormat || {};
                                 console.log(`[Twilio] start sid=${streamSid} encoding=${fmt.encoding} rate=${fmt.sampleRate} ch=${fmt.channels}`);
                                 // Do NOT flush the whole queue at once; let the pacer drain it
                                 startPacer();
                                 break;
-                            case "media":
+                            }
+                            case "media": {
                                 if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
                                     const audioMessage = {
                                         user_audio_chunk: Buffer.from(
@@ -308,12 +311,15 @@ export function registerInboundRoutes(fastify) {
                                     elevenLabsWs.send(JSON.stringify({ user_audio_chunk: buf.toString("base64") }));
                                 }
                                 break;
-                            case "stop":
+                            }
+                            case "stop": {
                                 stopPacer();
                                 console.log(`[Twilio] stream ${data.streamSid} stopped by Twilio`);
                                 break;
-                            default:
+                            }
+                            default: {
                                 console.log(`[Twilio] Received unhandled event: ${data.event}`);
+                            }
                         }
                     } catch (error) {
                         console.error("[Twilio] Error processing message:", error);
