@@ -209,6 +209,7 @@ export function registerInboundRoutes(fastify) {
                                     stats.forwardedToELBytes += buf.length;
                                     // forward to ElevenLabs (same payload, just normalized)
                                     elevenLabsWs.send(JSON.stringify({ user_audio_chunk: buf.toString("base64") }));
+                                }
                                 break;
                             case "stop":
                                 if (elevenLabsWs) {
