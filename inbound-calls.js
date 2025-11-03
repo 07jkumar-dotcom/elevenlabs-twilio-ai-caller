@@ -181,10 +181,14 @@ export function registerInboundRoutes(fastify) {
                         switch (data.event) {
                             case "start":
                                 streamSid = data.start.streamSid;
-                                console.log(`[Twilio] Stream started with ID: ${streamSid}`);
+                                // log Twilio media format so you can sanity-check 8k ulaw
+                                const fmt = data.start.mediaFormat || {};
+                                console.log(`[Twilio] start sid=${streamSid} encoding=${fmt.encoding} rate=${fmt.sampleRate} ch=${fmt.channels}`);
                                 // flush any buffered EL audio
                                 while (outQueue.length) {
                                     const b64 = outQueue.shift();
+                                    // count the bytes we send during the initial flush
+                                    stats.forwardedToTwilioBytes += Buffer.from(b64, "base64").length;
                                     connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
                                 }
                                 break;
@@ -198,6 +202,13 @@ export function registerInboundRoutes(fastify) {
                                     };
                                     elevenLabsWs.send(JSON.stringify(audioMessage));
                                 }
+                                if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
+                                    // count Twilio inbound frames and bytes forwarded to EL
+                                    stats.twilioMediaInFrames++;
+                                    stats.forwardedToELBytes += Buffer.from(data.media.payload, "base64").length;
+                                    stats.forwardedToELBytes += buf.length;
+                                    // forward to ElevenLabs (same payload, just normalized)
+                                    elevenLabsWs.send(JSON.stringify({ user_audio_chunk: buf.toString("base64") }));
                                 break;
                             case "stop":
                                 if (elevenLabsWs) {
