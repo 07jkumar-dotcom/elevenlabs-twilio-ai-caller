@@ -60,6 +60,59 @@ export function registerInboundRoutes(fastify) {
                 elAudioFrames: 0,            // audio frames received from ElevenLabs
                 forwardedToTwilioBytes: 0    // bytes sent back to Twilio
             };
+            // --- Outbound pacing to Twilio: 160B @ 50fps (20ms) ---
+            const FRAME_BYTES = 160;
+            const FRAME_INTERVAL_MS = 20;
+            let pacerTimer = null;
+            const outQueue = outQueue || []; // keep your existing queue if present
+
+            function startPacer() {
+                if (pacerTimer) return;
+                pacerTimer = setInterval(() => {
+                    try {
+                        if (!connection || connection.readyState !== WebSocket.OPEN) return;
+                        if (!streamSid) return;
+                        const b64 = outQueue.shift();
+                        if (!b64) return;
+                        // send exactly one 20ms frame
+                        connection.send(JSON.stringify({
+                            event: "media",
+                            streamSid,
+                            media: { payload: b64 }
+                        }));
+                        stats.forwardedToTwilioBytes += Buffer.from(b64, "base64").length;
+                    } catch (e) {
+                        console.warn("[Pacer] send error:", e?.message);
+                    }
+                }, FRAME_INTERVAL_MS);
+            }
+
+            function stopPacer() {
+                if (!pacerTimer) return;
+                clearInterval(pacerTimer);
+                pacerTimer = null;
+            }
+
+            function stripWaveIfNeeded(buf) {
+                // If EL ever wraps ulaw in a WAV container, strip to raw data chunk
+                if (buf.length >= 12 && buf.slice(0, 4).toString() === "RIFF") {
+                    const dataIdx = buf.indexOf(Buffer.from("data"));
+                    if (dataIdx > 0 && dataIdx + 8 <= buf.length) {
+                        return buf.subarray(dataIdx + 8); // skip 'data' + chunk size (4B)
+                    }
+                }
+                return buf;
+            }
+
+            function enqueueELBase64(elBase64) {
+                let buf = Buffer.from(elBase64, "base64");
+                buf = stripWaveIfNeeded(buf); // ensure raw μ-law 8k mono
+                // Slice into 160-byte frames and queue
+                for (let i = 0; i < buf.length; i += FRAME_BYTES) {
+                    const frame = buf.subarray(i, Math.min(i + FRAME_BYTES, buf.length));
+                    outQueue.push(frame.toString("base64"));
+                }
+            }
 
             const statsTimer = setInterval(() => {
                 console.log(`[STATS] in(Twilio frames)=${stats.twilioMediaInFrames} -> EL(bytes)=${stats.forwardedToELBytes} | in(EL frames)=${stats.elAudioFrames} -> Twilio(bytes)=${stats.forwardedToTwilioBytes}`);
@@ -99,10 +152,20 @@ export function registerInboundRoutes(fastify) {
                 // Handle messages from ElevenLabs
                 elevenLabsWs.on("message", (data) => {
                     try {
-                        const message = JSON.parse(data);
-                        handleElevenLabsMessage(message, connection);
-                    } catch (error) {
-                        console.error("[II] Error parsing message:", error);
+                        const msg = JSON.parse(data);
+                        // Handle common EL audio field names; adjust to your payload if different
+                        const b64 =
+                            msg.agent_audio_chunk ||
+                            msg.audio_base64 ||
+                            (msg.audio && msg.audio.chunk) ||
+                            null;
+                        if (b64) {
+                            stats.elAudioFrames++;
+                            enqueueELBase64(b64); // packetize to 160B frames
+                        }
+                        // ... handle other EL events/logging as you already do ...
+                    } catch (e) {
+                        console.error("EL ws parse error", e);
                     }
                 });
 
@@ -191,6 +254,8 @@ export function registerInboundRoutes(fastify) {
                                     stats.forwardedToTwilioBytes += Buffer.from(b64, "base64").length;
                                     connection.send(JSON.stringify({ event: "media", streamSid, media: { payload: b64 } }));
                                 }
+                                // start the pacer
+                                startPacer();
                                 break;
                             case "media":
                                 if (convoReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
@@ -215,6 +280,8 @@ export function registerInboundRoutes(fastify) {
                                 if (elevenLabsWs) {
                                     elevenLabsWs.close();
                                 }
+                                stopPacer();
+                                console.log(`[Twilio] stream ${data.streamSid} stopped by Twilio`);
                                 break;
                             default:
                                 console.log(`[Twilio] Received unhandled event: ${data.event}`);
@@ -226,6 +293,7 @@ export function registerInboundRoutes(fastify) {
 
                 // Handle close event from Twilio
                 connection.on("close", () => {
+                    stopPacer();
                     if (elevenLabsWs) {
                         elevenLabsWs.close();
                     }
