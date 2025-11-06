@@ -74,7 +74,6 @@ export function registerInboundRoutes(fastify) {
                         if (!streamSid) return;
                         const b64 = outQueue.shift();
                         if (!b64) return;
-                        console.log(`[Pacer] sending 160B frame sid=${streamSid} q=${outQueue.length}`);
                         connection.send(JSON.stringify({
                             event: "media",
                             streamSid,
